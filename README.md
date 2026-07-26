@@ -232,7 +232,7 @@ CSV HEADER;
 ```
 
 ### 5.2 核心规模指标
-整体行为量、用户数、商品数和类目数是多少？
+- 整体行为量、用户数、商品数和类目数是多少？
 
 ```sql
 SELECT
@@ -298,7 +298,7 @@ ORDER BY item_id, behavior_date;
 ### 5.4 小时流量分析
 - 用户在一天中的哪些时段最活跃？
 - 商品小时流量？
-- 
+
 ```sql
 SELECT
     behavior_hour,
@@ -384,7 +384,7 @@ FROM behavior_to_buy;
 这里使用 `MAX(behavior_datetime)` 可以判断行为之后是否至少存在一次购买，同时避免把一条来源行为与多条购买记录连接后重复计数。
 
 ### 5.6 复购分析
-购买用户中有多少人发生了两次及以上购买？
+- 购买用户中有多少人发生了两次及以上购买？
 
 ```sql
 WITH user_buy_counts AS (
