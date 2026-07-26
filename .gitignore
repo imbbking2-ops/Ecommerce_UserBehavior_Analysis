@@ -3,10 +3,11 @@ data/row/*.csv
 data/processed/*.csv
 
 # Python
+ml.py
 .venv/
 __pycache__/
 *.pyc
-ml.py
+
 
 # IDE
 .vscode
