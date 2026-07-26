@@ -6,6 +6,7 @@ data/processed/*.csv
 .venv/
 __pycache__/
 *.pyc
+ml.py
 
 # IDE
 .vscode
