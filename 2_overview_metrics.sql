@@ -207,22 +207,4 @@ GROUP BY category_id
 HAVING COUNT(*) >= 100
 ORDER BY buy_count DESC
 LIMIT 20;
-WITH behavior_counts AS (
-    SELECT
-        behavior_type,
-        COUNT(DISTINCT user_id) AS user_count
-    FROM user_behavior
-    GROUP BY behavior_type
-)
-SELECT
-    behavior_type,
-    user_count,
-    ROUND(user_count * 100.0 / MAX(user_count) OVER (), 2) AS conversion_rate_from_pv
-FROM behavior_counts
-ORDER BY
-    CASE behavior_type
-        WHEN 'pv' THEN 1
-        WHEN 'fav' THEN 2
-        WHEN 'cart' THEN 3
-        WHEN 'buy' THEN 4
-    END;
+

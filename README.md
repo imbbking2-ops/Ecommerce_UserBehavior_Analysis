@@ -1,11 +1,6 @@
 # 淘宝电商用户行为分析与购买预测
 
-本项目基于淘宝 `UserBehavior` 用户行为数据，完成从数据清洗、关系型数据库建模、SQL 指标分析、购买预测建模到 BI 可视化的完整分析链路。项目围绕浏览（PV）、收藏（Fav）、加购（Cart）和购买（Buy）行为，帮助业务理解用户如何从“产生兴趣”逐步走向“完成购买”。
-
-> 在线看板：[Commerce Pulse｜电商用户行为 BI](https://commerce-pulse-bi.imbbking2.chatgpt.site)  
-> 当前看板分析窗口：2017-11-25 至 2017-12-03
-
-![Commerce Pulse BI 看板](docs/images/bi-dashboard.png)
+本项目基于淘宝 `UserBehavior` 用户行为数据，完成从数据清洗、关系型数据库建模、SQL 指标分析到购买预测建模的完整分析链路。项目围绕浏览（PV）、收藏（Fav）、加购（Cart）和购买（Buy）行为，帮助业务理解用户如何从“产生兴趣”逐步走向“完成购买”。
 
 ## 目录
 
@@ -14,11 +9,10 @@
 - [3. 技术栈](#3-技术栈)
 - [4. 分析问题](#4-分析问题)
 - [5. 数据清洗](#5-数据清洗)
-- [6. SQL 分析](#6-sql-分析)
-- [7. 机器学习建模](#7-机器学习建模)
-- [8. BI 看板](#8-bi-看板)
-- [9. 结论与业务建议](#9-结论与业务建议)
-- [10. 项目结构与运行方式](#10-项目结构与运行方式)
+- [5. SQL 分析](#5-sql-分析)
+- [6. 机器学习建模](#6-机器学习建模)
+- [7. 结论与业务建议](#7-结论与业务建议)
+- [8. 项目结构与运行方式](#8-项目结构与运行方式)
 
 ## 1. 项目背景
 
@@ -80,7 +74,7 @@ df = pd.read_csv(
 )
 ```
 
-> 数据规模说明：官方数据集规模较大。本项目的数据清洗脚本支持通过 `nrows` 生成开发样本；已发布 BI 看板使用当前项目清洗文件，并限制到 2017-11-25 至 2017-12-03。看板结果代表当前项目数据子集，不应直接外推为淘宝平台整体表现。
+> 数据规模说明：官方数据集规模较大。本项目的数据清洗脚本支持通过 `nrows` 生成开发样本；当前 SQL 结果基于项目清洗文件，分析结果代表当前项目数据子集，不应直接外推为淘宝平台整体表现。
 
 ## 3. 技术栈
 
@@ -90,9 +84,7 @@ df = pd.read_csv(
 | 数据存储 | PostgreSQL | 保存行为明细并执行聚合分析 |
 | SQL 兼容 | MySQL | 可通过 `SUM(CASE WHEN ...)` 改写 PostgreSQL 的 `FILTER` |
 | 机器学习 | scikit-learn | 数据切分、随机森林、交叉验证与模型评估 |
-| BI 分析 | Power BI / Tableau | 连接 SQL 结果，构建业务分析页面 |
-| Web BI | React、TypeScript | 项目内已实现的 Commerce Pulse 交互式看板 |
-| 版本管理 | Git | 管理分析代码和看板代码 |
+| 版本管理 | Git | 管理分析代码、SQL 和建模脚本 |
 
 项目采用以下数据链路：
 
@@ -103,7 +95,7 @@ pandas 数据清洗
         ↓
 清洗后的 CSV / PostgreSQL
         ↓
-SQL 指标分析 ─────────→ BI 看板
+SQL 指标分析与结果可视化
         ↓
 用户—商品特征工程
         ↓
@@ -245,7 +237,27 @@ SELECT
 FROM user_behavior;
 ```
 
-这些指标用于确定数据规模、覆盖范围和时间边界，也是 BI 看板的顶部 KPI。
+![SQL 结果 1：数据规模概览](docs/images/sql/01_sql_result.png)
+
+这些指标用于确定数据规模、覆盖范围和时间边界。
+
+行为类型的数量和占比：
+
+```sql
+SELECT
+    behavior_type,
+    COUNT(*) AS event_count,
+    ROUND(
+        COUNT(*) * 100.0
+        / SUM(COUNT(*)) OVER (),
+        2
+    ) AS event_ratio
+FROM user_behavior
+GROUP BY behavior_type
+ORDER BY event_count DESC;
+```
+
+![SQL 结果 2：用户行为分布](docs/images/sql/02_sql_result.png)
 
 ### 5.3 日流量分析
 - DAU、PV、UV 和购买用户数如何随日期变化？
@@ -269,6 +281,8 @@ FROM user_behavior
 GROUP BY behavior_date
 ORDER BY behavior_date;
 ```
+
+![SQL 结果 3：整体日流量趋势](docs/images/sql/03_daily_traffic.png)
 
 商品级日流量则增加 `item_id` 分组：
 
@@ -295,6 +309,8 @@ GROUP BY item_id, behavior_date
 ORDER BY item_id, behavior_date;
 ```
 
+![SQL 结果 4：Top 10 商品日流量热力图](docs/images/sql/04_product_daily_heatmap.png)
+
 ### 5.4 小时流量分析
 - 用户在一天中的哪些时段最活跃？
 - 商品小时流量？
@@ -315,11 +331,37 @@ GROUP BY behavior_hour
 ORDER BY behavior_hour;
 ```
 
+![SQL 结果 5：整体小时流量趋势](docs/images/sql/05_hourly_traffic.png)
+
 商品小时流量使用：
 
 ```sql
+SELECT
+    item_id,
+    behavior_hour,
+    COUNT(*) AS event_count,
+    COUNT(*) FILTER (
+        WHERE behavior_type = 'pv'
+    ) AS pv,
+    COUNT(DISTINCT user_id) AS uv,
+    COUNT(*) FILTER (
+        WHERE behavior_type = 'fav'
+    ) AS fav_events,
+    COUNT(*) FILTER (
+        WHERE behavior_type = 'cart'
+    ) AS cart_events,
+    COUNT(*) FILTER (
+        WHERE behavior_type = 'buy'
+    ) AS buy_events,
+    COUNT(DISTINCT user_id) FILTER (
+        WHERE behavior_type = 'buy'
+    ) AS paying_users
+FROM user_behavior
 GROUP BY item_id, behavior_hour
+ORDER BY item_id, behavior_hour;
 ```
+
+![SQL 结果 6：Top 10 商品小时流量热力图](docs/images/sql/06_product_hourly_heatmap.png)
 
 从而识别不同商品的高峰时段。
 
@@ -378,8 +420,16 @@ SELECT
         / NULLIF(total_behavior_count, 0),
         2
     ) AS conversion_to_buy_rate
-FROM behavior_to_buy;
+FROM behavior_to_buy
+ORDER BY
+    CASE behavior_type
+        WHEN 'pv' THEN 1
+        WHEN 'fav' THEN 2
+        WHEN 'cart' THEN 3
+    END;
 ```
+
+![SQL 结果 7：各行为到购买的有效转化结果](docs/images/sql/07_sql_result.png)
 
 这里使用 `MAX(behavior_datetime)` 可以判断行为之后是否至少存在一次购买，同时避免把一条来源行为与多条购买记录连接后重复计数。
 
@@ -409,6 +459,8 @@ SELECT
 FROM user_buy_counts;
 ```
 
+![SQL 结果 8：购买与复购指标](docs/images/sql/08_sql_result.png)
+
 当前定义是“观察期内发生至少两次购买行为的用户”为复购用户。如果业务需要更加严格的口径，可以改为“至少在两个不同日期购买”或“至少完成两个不同订单”。
 
 ### 5.7 RF 用户分层
@@ -431,16 +483,45 @@ WITH user_buy AS (
 user_rf AS (
     SELECT
         user_id,
-        MAX(last_buy_date) OVER ()
-            - last_buy_date AS recency_days,
-        frequency
+        last_buy_date,
+        frequency,
+        MAX(last_buy_date) OVER () - last_buy_date AS recency_days
     FROM user_buy
+),
+rf_median AS (
+    SELECT
+        PERCENTILE_CONT(0.5) WITHIN GROUP (
+            ORDER BY recency_days
+        ) AS recency_median,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (
+            ORDER BY frequency
+        ) AS frequency_median
+    FROM user_rf
+),
+rf_score AS (
+    SELECT
+        ur.user_id,
+        ur.last_buy_date,
+        ur.recency_days,
+        ur.frequency,
+        CASE
+            WHEN ur.recency_days <= rm.recency_median THEN 2
+            ELSE 1
+        END AS r_score,
+        CASE
+            WHEN ur.frequency >= rm.frequency_median THEN 2
+            ELSE 1
+        END AS f_score
+    FROM user_rf AS ur
+    CROSS JOIN rf_median AS rm
 )
 SELECT
-    user_id,
-    recency_days,
-    frequency
-FROM user_rf;
+    r_score,
+    f_score,
+    COUNT(*) AS user_count
+FROM rf_score
+GROUP BY r_score, f_score
+ORDER BY r_score DESC, f_score DESC;
 ```
 
 再利用中位数对 R、F 打分：
@@ -451,6 +532,51 @@ FROM user_rf;
 | 2 | 1 | 潜力用户 | 关联推荐、加购激励 |
 | 1 | 2 | 重要召回用户 | 定向优惠、流失预警 |
 | 1 | 1 | 一般/沉睡用户 | 低成本触达、控制营销成本 |
+
+![SQL 结果 9：RF 用户分层统计](docs/images/sql/09_sql_result.png)
+
+### 5.8 商品与类目分析
+
+统计行为量不少于 100 次的商品类目，并按购买次数筛选 Top 20：
+
+```sql
+SELECT
+    category_id,
+    COUNT(*) AS event_count,
+    COUNT(*) FILTER (
+        WHERE behavior_type = 'pv'
+    ) AS pv_count,
+    COUNT(*) FILTER (
+        WHERE behavior_type = 'cart'
+    ) AS cart_count,
+    COUNT(*) FILTER (
+        WHERE behavior_type = 'fav'
+    ) AS fav_count,
+    COUNT(*) FILTER (
+        WHERE behavior_type = 'buy'
+    ) AS buy_count,
+    ROUND(
+        COUNT(*) FILTER (
+            WHERE behavior_type = 'buy'
+        ) * 100.0
+        / NULLIF(
+            COUNT(*) FILTER (
+                WHERE behavior_type = 'pv'
+            ),
+            0
+        ),
+        2
+    ) AS buy_pv_rate
+FROM user_behavior
+GROUP BY category_id
+HAVING COUNT(*) >= 100
+ORDER BY buy_count DESC
+LIMIT 20;
+```
+
+![SQL 结果 10：Top 20 商品类目购买表现](docs/images/sql/10_category_analysis.png)
+
+图中按购买次数从高到低排列商品类目，并同时标注购买次数和购买/PV 比率。购买次数反映类目的成交规模，`buy_pv_rate` 则用于比较不同流量规模下的购买效率。高购买量但低购买率的类目适合优先优化商品详情、价格和促销策略；购买率较高但流量较小的类目可以考虑增加曝光。
 
 
 
@@ -694,31 +820,32 @@ gs.fit(X_train, y_train)
 
 ```python
 from sklearn.metrics import (
-    average_precision_score,
     classification_report,
-    confusion_matrix,
     roc_auc_score,
 )
 
 y_pred = model.predict(X_test)
 y_proba = model.predict_proba(X_test)[:, 1]
 
-print(classification_report(
-    y_test,
-    y_pred,
-    digits=4,
-    zero_division=0,
-))
-print("ROC-AUC:", roc_auc_score(
-    y_test,
-    y_proba,
-))
-print("PR-AUC:", average_precision_score(
-    y_test,
-    y_proba,
-))
-print(confusion_matrix(y_test, y_pred))
+print(classification_report(y_test, y_pred))
+print("AUC:", roc_auc_score(y_test, y_proba))
 ```
+
+实际运行结果：
+
+![随机森林购买预测运行结果](docs/images/random_forest_result.png)
+
+测试集中共有 132,143 个用户—商品样本，其中正样本（次日发生购买）只有 154 个，占比约为 **0.12%**，负样本与正样本数量之比约为 **857:1**。因此不能只根据 Accuracy 或 weighted avg 判断模型质量。
+
+结果分析：
+
+- **ROC-AUC 为 0.8655**：模型对购买样本和未购买样本具有较好的整体排序能力，说明多时间窗口行为次数、最近一次行为类型和行为间隔等特征包含有效购买信号。
+- **正样本 Recall 为 0.70**：约 70% 的真实购买样本被模型识别出来，适合强调覆盖率的潜客召回场景。
+- **正样本 Precision 仅为 0.01，F1-score 为 0.01**：模型为了召回购买用户产生了大量误报。如果直接对全部预测正例发放优惠券，会带来较高营销成本。
+- **Accuracy 为 0.88，不适合作为主要指标**：在当前测试集中，即使全部预测为“不购买”，准确率也约为 99.88%。因此 88% 的准确率不能证明模型具有良好的购买识别效果。
+- **weighted avg 被负样本主导**：加权 Precision 和 F1-score 看起来很高，但不能代表少数类购买样本的预测质量，应重点查看类别 1 的 Precision、Recall、F1-score，以及 PR-AUC。
+
+后续应在验证集上调整分类阈值，并结合业务预算使用 PR-AUC、Precision-Recall 曲线、Recall@Top-K、Precision@Top-K 和 Lift 选择实际触达用户。例如营销资源有限时，可按购买概率从高到低选择 Top 1% 或 Top 5% 用户，而不是固定使用 `0.5` 阈值。
 
 重点指标：
 
@@ -727,117 +854,27 @@ print(confusion_matrix(y_test, y_pred))
 | Precision | 被模型判为会购买的样本中，有多少真实购买 |
 | Recall | 所有真实购买样本中，模型识别出了多少 |
 | F1-score | Precision 与 Recall 的综合表现 |
-| ROC-AUC | 模型对正负样本的整体排序能力 |
-| PR-AUC | 极度不平衡场景下更重要的正样本识别能力 |
+| ROC-AUC | 模型对正负样本的整体排序能力；本次结果为 0.8655 |
+| PR-AUC | 极度不平衡场景下更重要的正样本识别能力，建议在后续评估中补充 |
+| Precision@Top-K | 在有限营销名单中，排名靠前用户的真实购买比例 |
+| Recall@Top-K | Top-K 名单覆盖了多少真实购买用户 |
+| Lift | 模型筛选相对于随机触达带来的购买率提升 |
 
-## 7. BI 看板
+## 7. 结论与业务建议
 
-项目提供两种 BI 落地方式：
+以下结论基于当前 SQL 分析结果和项目数据子集：
 
-1. 将 PostgreSQL/MySQL 聚合结果导入 Power BI 或 Tableau；
-2. 使用项目内已经搭建并发布的 Commerce Pulse Web BI。
-
-在线地址：
-
-<https://commerce-pulse-bi.imbbking2.chatgpt.site>
-
-### 7.1 数据快照生成
-
-Web BI 的指标数据由 [`bi-dashboard/scripts/generate_dashboard_data.py`](bi-dashboard/scripts/generate_dashboard_data.py) 从清洗数据生成：
-
-```python
-daily = (
-    df.groupby("date", observed=True)
-    .agg(
-        event_count=("user_id", "size"),
-        uv=("user_id", "nunique"),
-    )
-    .reset_index()
-)
-
-hourly = (
-    df.groupby("hour", observed=True)
-    .agg(
-        event_count=("user_id", "size"),
-        uv=("user_id", "nunique"),
-    )
-    .reset_index()
-)
-```
-
-商品级数据：
-
-```python
-top_item_daily = (
-    top_items_df
-    .groupby(
-        ["item_id", "date"],
-        observed=True,
-    )
-    .agg(
-        event_count=("user_id", "size"),
-        pv=(
-            "behavior_type",
-            lambda x: int((x == "pv").sum()),
-        ),
-        uv=("user_id", "nunique"),
-        buy=(
-            "behavior_type",
-            lambda x: int((x == "buy").sum()),
-        ),
-    )
-    .reset_index()
-)
-```
-
-### 7.2 看板模块及分析价值
-
-当前看板采用单页经营驾驶舱设计，各模块相当于传统 BI 中的不同分析页：
-
-| 看板模块 | 展示指标 | 分析价值 |
-|---|---|---|
-| 全局概览 | 总行为量、活跃用户、覆盖商品、复购率 | 快速判断业务规模和用户质量 |
-| 行为结构 | PV、收藏、加购、购买量及占比 | 识别用户主要行为及漏斗结构 |
-| 日流量 | 日行为量、PV、购买量 | 发现流量增长、异常波动和重点日期 |
-| 小时流量 | 0—23 时行为热度 | 识别投放、推送和活动运营时段 |
-| 转化分析 | PV/Fav/Cart 到购买的有效转化率 | 判断哪些行为代表更强购买意图 |
-| 商品流量 | 商品日流量、小时流量、UV 和购买量 | 识别高热商品及商品流量峰值 |
-| 商品排行 | Top 商品行为量、UV、加购、购买 | 支持商品运营资源分配 |
-| 类目分析 | Top 类目行为量 | 判断用户兴趣和流量集中方向 |
-
-在 Power BI/Tableau 中，可将以下字段设置为筛选器：
-
-- 日期；
-- 小时；
-- 商品 ID；
-- 类目 ID；
-- 行为类型。
-
-并建立以下核心度量：
-
-```text
-PV = 浏览事件数
-UV = 去重访问用户数
-购买用户数 = 发生购买的去重用户数
-行为转化率 = 有效转化行为数 / 行为总数
-复购率 = 复购用户数 / 购买用户数
-```
-
-## 8. 结论与业务建议
-
-以下结论基于当前看板数据窗口和项目数据子集：
-
-1. **越接近交易的行为，购买转化信号越强。** 浏览、收藏、加购后的有效购买转化率约为 2.47%、4.41% 和 6.33%。建议重点关注加购用户，并对加购未购买用户优先使用库存提醒、限时优惠和购物车召回等措施，而对收藏用户使用降价提醒。
+1. **越接近交易的行为，购买转化信号越强。** 浏览、收藏、加购后的有效购买转化率约为 2.50%、4.49% 和 6.61%。建议重点关注加购用户，并对加购未购买用户优先使用库存提醒、限时优惠和购物车召回等措施，而对收藏用户使用降价提醒。
 
 2. **流量在观察期后段明显增强。** 12 月 2 日行为量达到窗口峰值，12 月 3 日仍处于高位。建议将活动资源、客服排班、广告预算和库存准备向高流量日期倾斜，同时比较活动前后的购买转化率，而不仅是流量增幅。
 
 3. **小时流量集中在中午至下午早段。** 当前数据中 12—14 时较活跃，13 时达到小时行为峰值。消息推送和促销触达可在峰值前进行预热，但需要通过 A/B 测试验证增量效果，避免高峰期自然流量造成因果误判。
 
-4. **观察期内复购用户占比较高。** 当前复购率约为 66.03%，说明购买用户中存在较强的重复购买行为。建议进一步区分“同日多次购买”“跨日复购”和“跨类目复购”，并针对高频用户建立会员或忠诚度运营策略。
+4. **观察期内复购用户占比较高。** 当前复购率约为 66.21%，说明购买用户中存在较强的重复购买行为。建议进一步区分“同日多次购买”“跨日复购”和“跨类目复购”，并针对高频用户建立会员或忠诚度运营策略。
 
 5. **高流量商品不一定具有高购买效率。** 商品运营不应只按 PV 排名，应同时观察 UV、加购率、购买率以及商品的日/小时流量。对高浏览低购买商品，应优先检查价格、详情页、评价、库存和履约因素；对高加购商品，应加强临门转化策略。
 
-## 9. 项目结构与运行方式
+## 8. 项目结构与运行方式
 
 ```text
 ecommerce/
@@ -849,11 +886,13 @@ ecommerce/
 │       └── user_behavior_cleaned_sample.csv
 ├── docs/
 │   └── images/
-│       └── bi-dashboard.png
-├── bi-dashboard/
-│   ├── app/
-│   └── scripts/
-│       └── generate_dashboard_data.py
+│       └── sql/
+│           ├── 01_sql_result.png
+│           ├── 03_daily_traffic.png
+│           └── ...
+├── sql_result/
+│   ├── 1.csv ... 10.csv
+│   └── generate_readme_images.py
 ├── 1_creat_table.sql
 ├── 2_overview_metrics.sql
 ├── data_cleaning.py
@@ -862,7 +901,7 @@ ecommerce/
 └── README.md
 ```
 
-### 9.1 创建虚拟环境
+### 8.1 创建虚拟环境
 
 ```powershell
 python -m venv .venv
@@ -870,13 +909,13 @@ python -m venv .venv
 pip install pandas scikit-learn
 ```
 
-### 9.2 执行数据清洗
+### 8.2 执行数据清洗
 
 ```powershell
 python data_cleaning.py
 ```
 
-### 9.3 导入 PostgreSQL 并执行分析
+### 8.3 导入 PostgreSQL 并执行分析
 
 依次执行：
 
@@ -885,7 +924,7 @@ python data_cleaning.py
 2_overview_metrics.sql
 ```
 
-### 9.4 训练购买预测模型
+### 8.4 训练购买预测模型
 
 ```powershell
 python purchase_prediction_ml.py
@@ -897,15 +936,6 @@ python purchase_prediction_ml.py
 python GridsearchCV.py
 ```
 
-### 9.5 更新 BI 数据
-
-```powershell
-.\.venv\Scripts\python.exe `
-  bi-dashboard\scripts\generate_dashboard_data.py
-```
-
-生成新的数据快照后，需要重新构建或发布 BI 看板。
-
 ## 后续优化方向
 
 - 使用滚动时间窗口构造多个训练日、验证日和测试日；
@@ -913,6 +943,5 @@ python GridsearchCV.py
 - 加入行为转换序列、活跃天数、行为间隔和趋势比例特征；
 - 使用 LightGBM/XGBoost 与随机森林进行对比；
 - 使用时间切分和阈值优化提升离线评估可靠性；
-- 将 BI 从数据快照升级为数据库或数据仓库定时刷新；
 - 增加模型特征重要性、SHAP 解释和用户购买概率分层。
 
