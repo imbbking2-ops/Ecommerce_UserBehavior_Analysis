@@ -1,0 +1,11 @@
+# 原始及处理后的数据
+data/row/*.csv
+data/processed/*.csv
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# IDE
+.vscode

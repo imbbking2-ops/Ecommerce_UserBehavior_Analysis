@@ -1,0 +1,6 @@
+{
+    "recommendations": [
+        "mechatroner.rainbow-csv",
+        "mtxr.sqltools-driver-pg"
+    ]
+}
